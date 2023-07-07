@@ -1,0 +1,382 @@
+---
+title: "Diabets Classification"
+author: "Çağlar Yalçın"
+date: "2023-06-04"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+First of all applied data tidying and cleaning
+```{r}
+data_412 <- read.csv2("homework2.csv",sep =",")
+library(tidyverse) 
+library(dplyr)
+library(missForest)
+library(naniar)
+library(tidyr)
+library(mice)
+library(randomForest)
+library(caret)
+library(tidyr)
+library("writexl")
+library(keras)
+library(mlbench)
+library(dplyr)
+library(magrittr)
+library(neuralnet)
+library(e1071)
+library(nnet)
+library(neuralnet)
+```
+
+
+```{r}
+
+str(data_412)
+
+
+data_412 <- data_412 %>% mutate(Age = as.factor(Age),
+                        Gender = as.factor(Gender),
+                        Family_Diabetes = as.factor(Family_Diabetes),
+                        highBP = as.factor(highBP),
+                        PhysicallyActive = as.factor(PhysicallyActive),
+                        Smoking =as.factor(Smoking),
+                        Alcohol = as.factor(Alcohol),
+                        RegularMedicine = as.factor(RegularMedicine),
+                        JunkFood = as.factor(JunkFood),
+                        Stress = as.factor(Stress),
+                        BPLevel = as.factor(BPLevel),
+                        Pdiabetes = as.factor(Pdiabetes),
+                        UriationFreq = as.factor(UriationFreq),
+                        Diabetic = as.factor(Diabetic))
+
+```
+
+checked the irregular columns
+```{r}
+data_412%>%count(Gender)
+data_412%>%count(Age)
+data_412%>%count(Family_Diabetes)
+data_412%>%count(highBP)
+data_412%>%count(PhysicallyActive)
+data_412%>%count(Smoking)
+data_412%>%count(Alcohol)
+data_412%>%count(UriationFreq)
+data_412%>%count(JunkFood)
+data_412%>%count(Stress)
+```
+
+
+```{r}
+
+
+data_412<- data_412 %>% mutate(BPLevel=str_to_lower(BPLevel),
+                              BPLevel =str_trim(BPLevel,side = "right"),
+                              Diabetic =str_trim(Diabetic,side = "left"))
+
+data_412<- data_412 %>% mutate(BPLevel=recode(BPLevel,"yes" = "1"),
+                              BPLevel=recode(BPLevel,"o" = "no"))
+                              
+data_412$Pdiabetes[138] <- 0
+data_412$Pdiabetes[135] <- NA     
+data_412$Diabetic[114] <- NA
+
+```
+
+## PART A
+Checked missing value proportion,According to the plot there is  %14.4 missing values.Seems like a MCAR.
+```{r}
+vis_miss(data_412)
+library(mice)
+data_412$Diabetic <-as.factor(data_412$Diabetic)
+data_412$BPLevel <-as.factor(data_412$BPLevel)
+imputed_Data <- mice(data_412, m=1, maxit = 1, method = 'pmm', seed = 500)
+complete_data<-complete(imputed_Data,1)
+
+
+
+
+```
+ We imputed missing data using mice package with ppm method.And check how to imputed and is there is a problem.According to the plot there is no significant problem after imçputing
+
+```{r}
+densityplot(imputed_Data)
+
+sleepwithNA<- data_412$Sleep
+sleepwithoutNA<- complete_data$Sleep
+value<-c(sleepwithNA,sleepwithoutNA)
+label <-c(rep("WithNA",length(sleepwithNA)),rep("WithoutNA",length(sleepwithoutNA)))
+df_for_plot<-data.frame(value,label)
+ggplot(df_for_plot,aes(x=value,colour= label))+geom_density()
+
+BMIwithNA<- data_412$BMI
+BMIwithoutNA<- data_412$BMI
+value1<-c(BMIwithNA,BMIwithoutNA)
+label1 <-c(rep("WithNA",length(BMIwithNA)),rep("WithoutNA",length(BMIwithoutNA)))
+df_for_plot<-data.frame(value1,label1)
+ggplot(df_for_plot,aes(x=value1,colour= label1))+geom_density()
+
+
+
+
+vis_miss(complete_data)
+```
+
+## Part B
+In this part ,we have one target varible(as factor) and 4 contunios variable.Rest of them are categorical too.
+```{r}
+glimpse(complete_data)
+```
+## PART C
+Females are more likely to be diabets rather than males 
+```{r}
+female_data1 <- subset(complete_data, Gender == "Female")
+male_data1 <- subset(complete_data, Gender == "Male")
+
+female_odds <- sum(female_data1$Diabetic == "yes") / sum(female_data1$Diabetic == "no")
+male_odds <- sum(male_data1$Diabetic == "yes") / sum(male_data1$Diabetic== "no")
+odds_ratio <- female_odds / male_odds
+odds_ratio
+
+
+```
+`
+## PART D
+According to the bar plots with gradient color;
+  For pregancies there is a lot of red color , its means that pregnancies for 3-4 are common rather than the others.But in no section there is more that 0-1 pregnincies than yes section.
+  For SoundSleep there is a equal amount red and blue color both no and yes section.
+  For Sleep there is a lot of Blue color , its means that pregnancies for 4-6 are common rather than the others in both sections.
+  For BMI there is a extemlyf blue color , its means that pregnancies for 15-20 are common rather than the others in both section.İn additon in the no section there is a few significant red line with BMI =40-45
+```{r}
+
+library(ggplot2)
+ggplot(complete_data,aes(Diabetic,BMI,fill=BMI))+geom_bar(stat="identity")+scale_fill_gradient(low="blue",high="red")
+library(ggplot2)
+ggplot(complete_data,aes(Diabetic,Sleep,fill=Sleep))+geom_bar(stat="identity")+scale_fill_gradient(low="blue",high="red")
+ggplot(complete_data,aes(Diabetic,SoundSleep,fill=SoundSleep))+geom_bar(stat="identity")+scale_fill_gradient(low="blue",high="red")
+ggplot(complete_data,aes(Diabetic,Pregancies,fill=Pregancies))+geom_bar(stat="identity")+scale_fill_gradient(low="blue",high="red")
+
+```
+
+##PART E
+Scaled data and applied one hor encoding except target variable for categorical variable.Restore both scaled not scaled and one hot encoding data.
+```{r}
+complete_data <- complete_data %>% select(-X)
+a_412 <-  complete_data%>% select_if(is.integer)
+b_412 <- complete_data %>% select_if(is.factor)
+c_412<- scale(a_412)
+scaled_data_412 <- cbind(c_412,b_412)
+q2_412 <- b_412 %>% select(-Diabetic)
+dummy_412 <- dummyVars(" ~ .", data=q2_412)
+final_df_412 <- data.frame(predict(dummy_412, newdata=q2_412))
+encoding_scaled_412 <- cbind(c_412,final_df_412)
+encoding_412<- cbind(a_412,final_df_412)
+t_412 <-as.data.frame(complete_data$Diabetic)
+encoding_data_scaled_412<- cbind(encoding_scaled_412,t_412)
+encoding_data_412 <- cbind(encoding_412,t_412)
+colnames(encoding_data_scaled_412)[43] <- "Diabetic"
+colnames(encoding_data_412)[43] <- "Diabetic"
+```
+
+## PART F 
+There is a big jump of dimension(43).We want to dimension reduction with future selection.
+Try to boruta , Lasso and Ridge regression respectively.
+```{r}
+library(Boruta)
+set.seed(23)
+boruta.encoding_tr <- Boruta(Diabetic~., data = encoding_data_412, doTrace = 2)
+print(boruta.encoding_tr)
+boruta.encoding.412 <- TentativeRoughFix(boruta.encoding_tr)
+print(boruta.encoding.412)
+
+plot(boruta.encoding.412, xlab = "", xaxt = "n")
+
+
+getSelectedAttributes(boruta.encoding.412, withTentative = F)
+
+
+
+
+
+```
+
+According to the boruta 5 attribute is unimported.Also, it can be understood from the above plot that only the Z score values of BPLevel.Low and JunkFood.very.often (red boxplots) are lower than the maximum shadow feature Z score (blue boxplot on the right hand side).
+
+Second method is lasso
+```{r}
+
+library(glmnet)
+x <- model.matrix(Diabetic~., encoding_data_412)
+y <- ifelse(encoding_data_412$Diabetic == "yes", 1, 0)
+
+
+set.seed(24)
+lasso_cv <- cv.glmnet(x, y, alpha = 1, family = "binomial")
+plot(lasso_cv)
+lasso_cv$lambda.min
+
+
+
+
+
+#The plot displays the cross-validation error according to the log of lambda. The exact value of lambda is #0.003396744 which will give the most accurate model.
+
+
+
+
+model_best <- glmnet(x,y, alpha = 1, lambda = lasso_cv$lambda.min)
+coef(model_best)
+predicted_for_y <- predict(model_best, s = lasso_cv$lambda.min, newx = x)
+
+sst <- sum((y - mean(y))^2)
+sse <- sum((predicted_for_y - y)^2)
+
+rsq <- 1 - sse/sst
+rsq
+
+```
+Our lamda is 0,0033 and RSquare is 0.5308327.According to lasso 9 attiributed must be removed.
+
+0,53 R squred valu is enough so we will contunie with lasso.
+restored both future selection data.
+```{r}
+model_data_boruta <- encoding_data_412[, !names(encoding_data_412) %in% c( "BPLevel.low", "JunkFood.very.often", "Pdiabetes.", "Pdiabetes.no",
+"RegularMedicine.o")]
+
+model_data_lasso <- encoding_data_412[,!names(encoding_data_412) %in% c("Age.40.49","PhysicallyActive.more.than.half.an.hr","RegularMedicine.o","Smoking.yes","JunkFood.occasionally","Stress.very.often","BPLevel.low","Pdiabetes.yes","Pdiabetes.no")] 
+
+```
+
+## Part G
+We spit data as train(%80) an test(%20)
+
+```{r,warning=FALSE}
+set.seed(123)
+train_indices <- createDataPartition(model_data_lasso$Diabetic, p = 0.6, list = FALSE)
+train_data <- model_data_lasso[train_indices, ]
+test_data <- model_data_lasso[-train_indices, ]
+```
+
+
+## PART H
+
+
+```{r,warning=FALSE}
+tr_control<-trainControl(method = "cv", number =10,repeats = 5, search = "grid")
+glmmodel <- train(Diabetic ~ ., data = train_data, method = "glm", trControl = tr_control)
+print(glmmodel)
+summary(glmmodel)
+glm_predict_resp <- predict(glmmodel,test_data)
+glm_predict_resp
+glmmodel$finalModel
+```
+
+We construct the model by cross-validation with 10 folds. When we look at the summary of the model, the coefficient for the SoundSleep is 0.38916 According to this, we can say that each one-unit increase in SoundSleep, the odds of the event happening increase by a factor of exp(0.38916). If we want to examine one of categorical vairables, for example Alcohol.no, the coefficent for Alcohol.no is -0.05539. In addition, the reference category "yes " in this case and this coefficient show that the difference in log odds between being Alcohol.no or not. When we exponentiated this, exp(-0.05539) it can be interpreted as  the odds of the event happening are approximately times lower for Alcohol.no compared to yes to Diabets, assuming all other variables are held constant.
+
+
+
+```{r}
+test_tab = table(predicted = glm_predict_resp, actual = test_data$Diabetic)
+confusionMatrix(test_tab)
+```
+
+
+```{r,warning=FALSE}
+ctrl<-trainControl(method = "repeatedcv", number =10,repeats = 5, search = "random")
+
+set.seed(26)
+model_nn <-train(Diabetic ~.,  data =train_data, method = "nnet", trControl = ctrl,preProcess = c("center", "scale"))
+model_nn
+```
+
+## PART İ 
+we construcy neural network with 10 k hold cross validation and obtain best tune for hyper parameters so according the final model we obrain confusion matrix.
+```{r}
+model_nn$bestTune
+model_nn$finalModel
+```
+
+```{r,warning=FALSE}
+nn_model_final <- nnet(Diabetic ~ ., data = train_data, size = 16, decay = 0.256998939)
+nn_predict<-predict(nn_model_final,test_data,type="class")
+
+
+test_tab = table(predicted = nn_predict, actual = test_data$Diabetic)
+
+
+
+confusionMatrix(data = as.factor(nn_predict),reference = test_data$Diabetic)
+
+
+```
+
+
+According to the scatter plot we need radial kernel.
+```{r}
+scatter_plot <- ggplot(data = train_data, aes(x = BMI, y = Sleep , color = Diabetic )) + 
+ 
+  geom_point() + 
+  scale_color_manual(values = c("red", "blue")) +
+  
+  coord_equal()
+
+scatter_plot 
+```
+we construcy SVM with 10 k hold cross validation and obtain best tune for hyper parameters so according the final model we obrain confusion matrix.
+
+```{r,warning=FALSE}
+ctrl <- trainControl(method = "cv", number = 10)
+model_svm <- train(Diabetic ~ ., data = train_data, method = "svmRadial", trControl = ctrl,preProcess = c("center", "scale"))
+```
+
+
+```{r}
+model_svm
+model_svm$bestTune
+```
+
+
+```{r}
+predict_svm<-predict(model_svm,test_data)
+
+
+test_tab = table(predicted = predict_svm, actual = test_data$Diabetic)
+#confusionMatrix(test_tab)
+
+
+confusionMatrix(data = as.factor(predict_svm),reference = test_data$Diabetic)
+```
+
+
+
+```{r}
+
+
+library(pROC)
+
+
+svm_roc <- roc(response = test_data$Diabetic, predictor = as.numeric(predict_svm))
+svm_auc <- auc(svm_roc)
+
+
+nn_roc <- roc(response = test_data$Diabetic, predictor = as.numeric(nn_predict == "positive"))
+nn_auc <- auc(nn_roc)
+
+# Random forest
+glm_roc <- roc(response = test_data$Diabetic, predictor = as.numeric(glm_predict_resp))
+glm_auc <- auc(glm_roc)
+
+
+
+
+```
+
+
+
+According to the Confusion matrix and ROC curves .Best model is Neurol svm of high Sensivity an Specifity balanced.
